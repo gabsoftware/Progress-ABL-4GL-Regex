@@ -1,0 +1,7 @@
+{ inc/regex.def {1} }
+
+DEFINE DATASET ds_regex{1}
+    FOR tt_matches{1}, tt_submatches{1}
+    DATA-RELATION dr_rel1 FOR tt_matches{1}, tt_submatches{1}
+    RELATION-FIELDS( tt_matches{1}.NUM, tt_submatches{1}.NUM )
+.

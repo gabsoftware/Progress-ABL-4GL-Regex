@@ -1,0 +1,1 @@
+Copy libgcc_s.so.0 in /usr/lib/hpux64 to make it work in HP-UX 11.31 ia64!
