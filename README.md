@@ -30,9 +30,9 @@ As you can see in the include file, we use the following functions of the PCRE l
 
 The methods in the Regex.cls class are quite straitforward:
 
-mMatch: returns true if there's a match  
-mNumMatches: returns the number of matches, or a number below or equal to zero in case of error  
-mGetMatches: returns the number of matches and populate a dataset of matches and sub-matches  
-mReplace: performs a regex replace of a string with another string (sub-matches placeholders are supported in replacement string)  
+`mMatch`: returns true if there's a match  
+`mNumMatches`: returns the number of matches, or a number below or equal to zero in case of error  
+`mGetMatches`: returns the number of matches and populate a dataset of matches and sub-matches  
+`mReplace`: performs a regex replace of a string with another string (sub-matches placeholders are supported in replacement string)  
 
 To use our class, just place all the files in your project and start using it!
