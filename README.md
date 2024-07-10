@@ -12,7 +12,8 @@ File details :
 `inc/regex.def`: TEMP-TABLE definitions for storing matches and sub-matches  
 `inc/regex.ds`: DATASET definition holding the temp-tables  
 `inc/regex.i`: can be included in any .p program to add support for native PCRE functions; uses the PCRE library DLL or shared library  
-`lib/pcre3.dll`: PCRE library for Windows  
+`lib/pcre-msvc-x86.dll`: PCRE library for Windows 32 bits
+`lib/pcre-msvc-x64.dll`: PCRE library for Windows 64 bits
 `lib/libpcre.so`: PCRE library for HP-UX 11.31 ia64  
 `lib/libgcc_s.so.0`: needed for PCRE library to work on HP-UX  
 `lib/libgcc_s.so.0.README`: just read it!  
@@ -36,3 +37,12 @@ The methods in the Regex.cls class are quite straitforward:
 `mReplace`: performs a regex replace of a string with another string (sub-matches placeholders are supported in replacement string)  
 
 To use our class, just place all the files in your project and start using it!
+
+You can build a copy of pcre DLL yourself (even x64) by getting it at
+https://sourceforge.net/projects/pcre/files/
+and opening the folder in Visual Studio.
+Configure it to build the shared libraries and support JIT compilation.
+Then define PCRE_LIB preprocessor variable to whatever DLL name you have.
+I built and included a Release version of PCRE with shared libs, JIT, UTF8 support
+both in 32 bits (x86) and 64 bits (x64) and I renamed the resulting pcre.dll
+to pcre-msvc-x64.dll and pcre-msvc-x86.dll.
