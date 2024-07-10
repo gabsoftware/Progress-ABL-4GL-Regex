@@ -15,7 +15,21 @@
 /* ********************  Preprocessor Definitions  ******************** */
 &IF "{&OPSYS}" = "WIN32" &THEN
     /* WINDOWS */
-    &SCOPED-DEFINE PCRE_LIB      pcre3.dll
+    /* You can build a copy of pcre DLL yourself (even x64) by getting it at
+       https://sourceforge.net/projects/pcre/files/
+       and opening the folder in Visual Studio.
+       Configure it to build the shared libraries and support JIT compilation.
+       Then define PCRE_LIB to whatever DLL name you want.
+       I built a Release version of PCRE with shared libs, JIT, UTF8 support
+       both in 32 bits (x86) and 64 bits (x64)
+       and I renamed the resulting pcre.dll
+       to pcre-msvc-x64.dll and pcre-msvc-x86.dll.
+    */
+    &IF "{&PROCESS-ARCHITECTURE}" = "64" &THEN
+        &SCOPED-DEFINE PCRE_LIB      pcre-msvc-x64.dll
+    &ELSE
+        &SCOPED-DEFINE PCRE_LIB      pcre-msvc-x86.dll
+    &ENDIF
     &SCOPED-DEFINE PCRE_TYP      CDECL
 &ELSE
     /* UNIX */
@@ -38,7 +52,13 @@
 
 FUNCTION get-library RETURNS CHARACTER () :
 
+/*    RETURN SEARCH( "lib/{&PCRE_LIB}" ).*/
+
+&IF "{&OPSYS}" = "WIN32" &THEN
     RETURN SEARCH( "lib/{&PCRE_LIB}" ).
+&ELSE
+    RETURN "{&PCRE_LIB}".
+&ENDIF
 
 END FUNCTION.
 
@@ -46,7 +66,7 @@ PROCEDURE pcre_compile :
     DEFINE INPUT               PARAMETER pattern     AS CHARACTER. /* const char *          */
     DEFINE INPUT               PARAMETER options     AS INTEGER.   /* int                   */
     DEFINE       OUTPUT        PARAMETER errptr      AS MEMPTR.    /* const char **         */
-    DEFINE       OUTPUT        PARAMETER erroffset   AS MEMPTR.    /* int *                 */
+    DEFINE       OUTPUT        PARAMETER erroffset   AS INTEGER.   /* int *                 */
     DEFINE INPUT               PARAMETER tableptr    AS INTEGER.   /* const unsigned char * */
     DEFINE              OUTPUT PARAMETER result      AS MEMPTR.    /* pcre *                */
 
@@ -63,11 +83,11 @@ PROCEDURE pcre_compile :
         hCall:NUM-PARAMETERS        = 5
         hCall:RETURN-VALUE-DLL-TYPE = "MEMPTR".
 
-    hCall:SET-PARAMETER(1, "CHARACTER", "INPUT" , pattern  ).
-    hCall:SET-PARAMETER(2, "LONG"     , "INPUT" , options  ).
-    hCall:SET-PARAMETER(3, "MEMPTR"   , "OUTPUT", errptr   ).
-    hCall:SET-PARAMETER(4, "MEMPTR"   , "OUTPUT", erroffset).
-    hCall:SET-PARAMETER(5, "LONG"     , "INPUT" , tableptr ).
+    hCall:SET-PARAMETER(1, "CHARACTER"     , "INPUT" , pattern  ).
+    hCall:SET-PARAMETER(2, "LONG"          , "INPUT" , options  ).
+    hCall:SET-PARAMETER(3, "MEMPTR"        , "OUTPUT", errptr   ).
+    hCall:SET-PARAMETER(4, "HANDLE TO LONG", "OUTPUT", erroffset).
+    hCall:SET-PARAMETER(5, "LONG"          , "INPUT" , tableptr ).
     hCall:INVOKE().
     ASSIGN result = hCall:RETURN-VALUE.
 
@@ -80,7 +100,7 @@ PROCEDURE pcre_compile2 :
     DEFINE INPUT               PARAMETER options     AS INTEGER.   /* int                   */
     DEFINE       OUTPUT        PARAMETER errcodeptr  AS INTEGER.   /* int *                 */
     DEFINE       OUTPUT        PARAMETER errptr      AS MEMPTR.    /* const char **         */
-    DEFINE       OUTPUT        PARAMETER erroffset   AS MEMPTR.    /* int *                 */
+    DEFINE       OUTPUT        PARAMETER erroffset   AS INTEGER.   /* int *                 */
     DEFINE INPUT               PARAMETER tableptr    AS INTEGER.   /* const unsigned char * */
     DEFINE              OUTPUT PARAMETER result      AS MEMPTR.    /* pcre *                */
 
@@ -98,12 +118,12 @@ PROCEDURE pcre_compile2 :
         hCall:NUM-PARAMETERS             = 6
         hCall:RETURN-VALUE-DLL-TYPE      = "MEMPTR".
 
-    hCall:SET-PARAMETER(1, "CHARACTER", "INPUT" , pattern    ).
-    hCall:SET-PARAMETER(2, "LONG"     , "INPUT" , options    ).
-    hCall:SET-PARAMETER(3, "HANDLE TO LONG"     , "OUTPUT", errcodeptr ).
-    hCall:SET-PARAMETER(4, "MEMPTR"   , "OUTPUT", errptr     ).
-    hCall:SET-PARAMETER(5, "MEMPTR"   , "OUTPUT", erroffset  ).
-    hCall:SET-PARAMETER(6, "LONG"     , "INPUT" , tableptr   ).
+    hCall:SET-PARAMETER(1, "CHARACTER"     , "INPUT" , pattern    ).
+    hCall:SET-PARAMETER(2, "LONG"          , "INPUT" , options    ).
+    hCall:SET-PARAMETER(3, "HANDLE TO LONG", "OUTPUT", errcodeptr ).
+    hCall:SET-PARAMETER(4, "MEMPTR"        , "OUTPUT", errptr     ).
+    hCall:SET-PARAMETER(5, "HANDLE TO LONG", "OUTPUT", erroffset  ).
+    hCall:SET-PARAMETER(6, "LONG"          , "INPUT" , tableptr   ).
     hCall:INVOKE().
     ASSIGN result = hCall:RETURN-VALUE.
 
@@ -180,6 +200,57 @@ PROCEDURE pcre_exec :
     DELETE OBJECT hCall.
 
 END PROCEDURE.
+
+/**
+  pcre_free does not exist, it is a pointer to a user-provided function. So we use SET-SIZE() instead.
+**/
+
+/*PROCEDURE pcre_free :                                                                               */
+/*    DEFINE INPUT               PARAMETER code        AS MEMPTR.         /* const pcre *           */*/
+/*                                                                                                    */
+/*    DEFINE VARIABLE libName AS CHARACTER NO-UNDO.                                                   */
+/*    DEFINE VARIABLE hCall   AS HANDLE    NO-UNDO.                                                   */
+/*                                                                                                    */
+/*    libName = get-library().                                                                        */
+/*                                                                                                    */
+/*    CREATE CALL hCall.                                                                              */
+/*    ASSIGN                                                                                          */
+/*        hCall:CALL-NAME                  = "pcre_free"                                              */
+/*        hCall:LIBRARY                    = libName                                                  */
+/*        hCall:LIBRARY-CALLING-CONVENTION = "CDECL"                                                  */
+/*        hCall:CALL-TYPE                  = DLL-CALL-TYPE                                            */
+/*        hCall:NUM-PARAMETERS             = 1.                                                       */
+/*                                                                                                    */
+/*    hCall:SET-PARAMETER(1, "MEMPTR"        , "INPUT" , code        ).                               */
+/*    hCall:INVOKE().                                                                                 */
+/*                                                                                                    */
+/*    DELETE OBJECT hCall.                                                                            */
+/*                                                                                                    */
+/*END PROCEDURE.                                                                                      */
+
+PROCEDURE pcre_free_study :
+    DEFINE INPUT               PARAMETER extra        AS MEMPTR.         /* const pcre_extra *           */
+
+    DEFINE VARIABLE libName AS CHARACTER NO-UNDO.
+    DEFINE VARIABLE hCall   AS HANDLE    NO-UNDO.
+
+    libName = get-library().
+
+    CREATE CALL hCall.
+    ASSIGN
+        hCall:CALL-NAME                  = "pcre_free_study"
+        hCall:LIBRARY                    = libName
+        hCall:LIBRARY-CALLING-CONVENTION = "CDECL"
+        hCall:CALL-TYPE                  = DLL-CALL-TYPE
+        hCall:NUM-PARAMETERS             = 1.
+
+    hCall:SET-PARAMETER(1, "MEMPTR"        , "INPUT" , extra        ).
+    hCall:INVOKE().
+
+    DELETE OBJECT hCall.
+
+END PROCEDURE.
+
 
 PROCEDURE pcre_fullinfo :
     DEFINE INPUT               PARAMETER code        AS MEMPTR . /* const pcre *           */
@@ -357,20 +428,18 @@ PROCEDURE match :
     DEFINE INPUT    PARAMETER  pr_in_options AS INT64     NO-UNDO.
     DEFINE OUTPUT   PARAMETER  pr_in_ret     AS INTEGER   NO-UNDO INITIAL -1.
 
+    DEFINE VARIABLE pt_error         AS MEMPTR    NO-UNDO.
+    DEFINE VARIABLE ch_error         AS CHARACTER NO-UNDO.
 
+    //DEFINE VARIABLE pt_eroff         AS MEMPTR    NO-UNDO.
+    DEFINE VARIABLE in_eroff         AS INTEGER   NO-UNDO.
 
-    DEFINE VARIABLE pt_error        AS MEMPTR    NO-UNDO.
-    DEFINE VARIABLE ch_error        AS CHARACTER NO-UNDO.
+    DEFINE VARIABLE in_errcode       AS INTEGER   NO-UNDO.
 
-    DEFINE VARIABLE pt_eroff        AS MEMPTR    NO-UNDO.
-    DEFINE VARIABLE in_eroff        AS INTEGER   NO-UNDO.
+    DEFINE VARIABLE pt_pcre          AS MEMPTR    NO-UNDO.
+    DEFINE VARIABLE pt_pcre_extra    AS MEMPTR    NO-UNDO.
 
-    DEFINE VARIABLE in_errcode      AS INTEGER   NO-UNDO.
-
-    DEFINE VARIABLE pt_pcre         AS MEMPTR    NO-UNDO.
-    DEFINE VARIABLE pt_pcre_extra   AS MEMPTR    NO-UNDO.
-
-    DEFINE VARIABLE in_options32    AS INTEGER   NO-UNDO.
+    DEFINE VARIABLE in_options32     AS INTEGER   NO-UNDO.
 
     /*
         - only 2/3 of the vector is exploitable
@@ -401,7 +470,7 @@ PROCEDURE match :
             /* global search */
             lg_global     = TRUE
 
-            /* we remove this special option of the option list */
+            /* we remove this special option from the option list */
             pr_in_options = Binary:BIN_AND64(
                 pr_in_options,
                 Binary:BIN_NOT64( 0x40000000 ) )
@@ -409,9 +478,8 @@ PROCEDURE match :
     END.
     ASSIGN in_options32 = INTEGER( pr_in_options ).
 
-
     SET-SIZE(pt_error) = 128.
-    SET-SIZE(pt_eroff) = 4.
+    //SET-SIZE(pt_eroff) = 4.
 
     /* compile the regex */
     RUN pcre_compile2(
@@ -419,19 +487,28 @@ PROCEDURE match :
         INPUT  in_options32,
         OUTPUT in_errcode,
         OUTPUT pt_error,
-        OUTPUT pt_eroff,
+        OUTPUT in_eroff,
         INPUT  0,
         OUTPUT pt_pcre ).
 
     /* if error, returns an error code and leave */
-    IF in_errcode > 0 THEN DO :
+    IF in_errcode <> 0 THEN DO :
         pr_in_ret = INTEGER( "-999" + STRING( in_errcode ) ).
-/*        RUN pcre_free( pt_pcre ).*/
+        IF GET-POINTER-VALUE( pt_error) > 0 THEN DO :
+            ASSIGN ch_error = GET-STRING( pt_error, 0 ) NO-ERROR.
+            IF ch_error <> ? AND ch_error <> "" THEN MESSAGE ch_error VIEW-AS ALERT-BOX.
+            SET-SIZE(pt_error) = 0.
+        END.
+        IF GET-POINTER-VALUE( pt_pcre) > 0 THEN DO :
+            //RUN pcre_free( INPUT pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+        END.
+        
         LEAVE.
     END.
 
     /* if no error */
-    IF pt_pcre <> ? AND in_errcode = 0 THEN DO :
+    IF GET-POINTER-VALUE( pt_pcre ) <> 0 THEN DO :
 
         /* study the regex */
         RUN pcre_study(
@@ -439,6 +516,21 @@ PROCEDURE match :
             INPUT  0,
             OUTPUT pt_error,
             OUTPUT pt_pcre_extra ).
+            
+        IF GET-POINTER-VALUE( pt_pcre_extra ) = 0 THEN DO :
+            
+            IF GET-POINTER-VALUE( pt_error) > 0 THEN DO :
+                ASSIGN ch_error = GET-STRING( pt_error, 0 ) NO-ERROR.
+                IF ch_error <> ? AND ch_error <> "" THEN MESSAGE ch_error VIEW-AS ALERT-BOX.
+                SET-SIZE(pt_error) = 0.
+            END.
+            
+            //RUN pcre_free( INPUT pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+            
+            LEAVE.
+        END. 
+        
 
         /* test the string with the compiled and optimized regex */
         RUN pcre_exec(
@@ -525,7 +617,7 @@ PROCEDURE match :
                                OR option_bits = 0x00500000 /* PCRE_NEWLINE_ANYCRLF */
                 .
 
-                /* loop for next matches*/
+                /* loop for next matches */
                 loop_next_match:
                 DO WHILE TRUE :
 
@@ -591,18 +683,26 @@ PROCEDURE match :
                     END.
 
                     ASSIGN
-                        in_nb  = in_ret /* number of matches + sub-matches        */
-                        in_ret = 1      /* number of matches                      */
-                        pr_in_ret = pr_in_ret + in_ret /* total number of matches */
+                        in_nb  = in_ret                /* number of matches + sub-matches */
+                        in_ret = 1                     /* number of matches               */
+                        pr_in_ret = pr_in_ret + in_ret /* total nbre matches              */
                     .
 
                 END. /* loop_next_match */
 
             END. /* if lg_global */
-
+            
         END. /* IF pr_in_ret >= 0 */
 
-/*        RUN pcre_free( pt_pcre ).*/
+        IF GET-POINTER-VALUE( pt_pcre_extra) > 0 THEN DO :
+            RUN pcre_free_study( pt_pcre_extra ).
+            //IF GET-POINTER-VALUE( pt_pcre_extra) > 0 THEN SET-SIZE(pt_pcre_extra) = 0.
+        END.
+
+        IF GET-POINTER-VALUE( pt_pcre) > 0 THEN DO :
+            //RUN pcre_free( INPUT pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+        END.
 
     END. /* IF pt_pcre <> ? AND in_errcode = 0 */
 
@@ -726,7 +826,7 @@ PROCEDURE get_matches :
     DEFINE VARIABLE pt_error        AS MEMPTR    NO-UNDO.
     DEFINE VARIABLE ch_error        AS CHARACTER NO-UNDO.
 
-    DEFINE VARIABLE pt_eroff        AS MEMPTR    NO-UNDO.
+    //DEFINE VARIABLE pt_eroff        AS MEMPTR    NO-UNDO.
     DEFINE VARIABLE in_eroff        AS INTEGER   NO-UNDO.
 
     DEFINE VARIABLE in_errcode      AS INTEGER   NO-UNDO.
@@ -765,7 +865,7 @@ PROCEDURE get_matches :
             /* global search */
             lg_global     = TRUE
 
-            /* we remove this special option of the option list */
+            /* we remove this special option from the option list */
             pr_in_options = Binary:BIN_AND64(
                 pr_in_options,
                 Binary:BIN_NOT64( 0x40000000 ) )
@@ -774,7 +874,7 @@ PROCEDURE get_matches :
     ASSIGN in_options32 = INTEGER( pr_in_options ).
 
     SET-SIZE(pt_error) = 128.
-    SET-SIZE(pt_eroff) = 4.
+    //SET-SIZE(pt_eroff) = 4.
 
     /* compile the regex */
     RUN pcre_compile2(
@@ -782,19 +882,28 @@ PROCEDURE get_matches :
         INPUT  in_options32,
         OUTPUT in_errcode,
         OUTPUT pt_error,
-        OUTPUT pt_eroff,
+        OUTPUT in_eroff,
         INPUT  0,
         OUTPUT pt_pcre ).
 
     /* if error, returns an error code and leave */
-    IF in_errcode > 0 THEN DO :
+    IF in_errcode <> 0 THEN DO :
         pr_in_ret = INTEGER( "-999" + STRING( in_errcode ) ).
-/*        RUN pcre_free( pt_pcre ).*/
+        IF GET-POINTER-VALUE( pt_error) > 0 THEN DO :
+            ASSIGN ch_error = GET-STRING( pt_error, 0 ) NO-ERROR.
+            IF ch_error <> ? AND ch_error <> "" THEN MESSAGE ch_error VIEW-AS ALERT-BOX.
+            SET-SIZE(pt_error) = 0.
+        END.
+        IF GET-POINTER-VALUE( pt_pcre) > 0 THEN DO :
+            //RUN pcre_free( pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+        END.
+        
         LEAVE.
     END.
 
     /* if no errors */
-    IF pt_pcre <> ? AND in_errcode = 0 THEN DO :
+    IF GET-POINTER-VALUE( pt_pcre ) <> 0 THEN DO :
 
         /* study the regex */
         RUN pcre_study(
@@ -802,6 +911,20 @@ PROCEDURE get_matches :
             INPUT  0,
             OUTPUT pt_error,
             OUTPUT pt_pcre_extra ).
+            
+        IF GET-POINTER-VALUE( pt_pcre_extra ) = 0 THEN DO :
+            
+            IF GET-POINTER-VALUE( pt_error) > 0 THEN DO :
+                ASSIGN ch_error = GET-STRING( pt_error, 0 ) NO-ERROR.
+                IF ch_error <> ? AND ch_error <> "" THEN MESSAGE ch_error VIEW-AS ALERT-BOX.
+                SET-SIZE(pt_error) = 0.
+            END.
+            
+            //RUN pcre_free( pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+            
+            LEAVE.
+        END.
 
         /* test the string with the compiled and optimized regex */
         RUN pcre_exec(
@@ -837,35 +960,32 @@ PROCEDURE get_matches :
                 IF in_cpt = 1 THEN DO :
                     CREATE tt_matches.
                     ASSIGN
-                        in_cpt2         = in_cpt2 + 1
-                        tt_matches.NUM  = in_cpt
-                        tt_matches.NBSM = 0
-                        tt_matches.OSTART= in_vector[ in_cpt * 2 - 1 ] + 1
-                        tt_matches.OEND  = in_vector[ in_cpt * 2     ] + 1
-                        tt_matches.LEN  = tt_matches.OEND - tt_matches.OSTART
-                        tt_matches.VAL  = SUBSTRING(
+                        in_cpt2           = in_cpt2 + 1
+                        tt_matches.NUM    = in_cpt
+                        tt_matches.NBSM   = 0
+                        tt_matches.OSTART = in_vector[ in_cpt * 2 - 1 ] + 1
+                        tt_matches.OEND   = in_vector[ in_cpt * 2     ] + 1
+                        tt_matches.LEN    = tt_matches.OEND - tt_matches.OSTART
+                        tt_matches.VAL    = SUBSTRING(
                             pr_ch_str,         /* source string      */
                             tt_matches.OSTART, /* offset start match */
                             tt_matches.LEN     /* length of match    */
-                        )
-                    .
-                    .
+                        ) NO-ERROR.
                 END.
                 ELSE DO :
                     CREATE tt_submatches.
                     ASSIGN
-                        tt_matches.NBSM     = tt_matches.NBSM + 1
-                        tt_submatches.NUM  = tt_matches.NUM
-                        tt_submatches.SNUM = in_cpt - 1
-                        tt_submatches.OSTART= in_vector[ in_cpt * 2 - 1 ] + 1
-                        tt_submatches.OEND  = in_vector[ in_cpt * 2     ] + 1
-                        tt_submatches.LEN  = tt_submatches.OEND - tt_submatches.OSTART
-                        tt_submatches.VAL  = SUBSTRING(
+                        tt_matches.NBSM      = tt_matches.NBSM + 1
+                        tt_submatches.NUM    = tt_matches.NUM
+                        tt_submatches.SNUM   = in_cpt - 1
+                        tt_submatches.OSTART = in_vector[ in_cpt * 2 - 1 ] + 1
+                        tt_submatches.OEND   = in_vector[ in_cpt * 2     ] + 1
+                        tt_submatches.LEN    = tt_submatches.OEND - tt_submatches.OSTART
+                        tt_submatches.VAL    = SUBSTRING(
                             pr_ch_str,            /* source string      */
                             tt_submatches.OSTART, /* offset start match */
                             tt_submatches.LEN     /* length of match    */
-                        ).
-                    .
+                        ) NO-ERROR. 
                 END.
             END.
 
@@ -1005,12 +1125,12 @@ PROCEDURE get_matches :
                         IF in_cpt = 1 THEN DO :
                             CREATE tt_matches.
                             ASSIGN
-                                tt_matches.NUM  = in_cpt2 + in_cpt
-                                tt_matches.NBSM = 0
-                                tt_matches.OSTART= in_vector[ in_cpt * 2 - 1 ] + 1
-                                tt_matches.OEND  = in_vector[ in_cpt * 2     ] + 1
-                                tt_matches.LEN  = tt_matches.OEND - tt_matches.OSTART
-                                tt_matches.VAL  = SUBSTRING(
+                                tt_matches.NUM    = in_cpt2 + in_cpt
+                                tt_matches.NBSM   = 0
+                                tt_matches.OSTART = in_vector[ in_cpt * 2 - 1 ] + 1
+                                tt_matches.OEND   = in_vector[ in_cpt * 2     ] + 1
+                                tt_matches.LEN    = tt_matches.OEND - tt_matches.OSTART
+                                tt_matches.VAL    = SUBSTRING(
                                     pr_ch_str,         /* source string      */
                                     tt_matches.OSTART, /* offset start match */
                                     tt_matches.LEN     /* length of match    */
@@ -1021,13 +1141,13 @@ PROCEDURE get_matches :
                         ELSE DO :
                             CREATE tt_submatches.
                             ASSIGN
-                                tt_matches.NBSM     = tt_matches.NBSM + 1
-                                tt_submatches.NUM  = tt_matches.NUM
-                                tt_submatches.SNUM = in_cpt - 1
-                                tt_submatches.OSTART= in_vector[ in_cpt * 2 - 1 ] + 1
-                                tt_submatches.OEND  = in_vector[ in_cpt * 2     ] + 1
-                                tt_submatches.LEN  = tt_submatches.OEND - tt_submatches.OSTART
-                                tt_submatches.VAL  = SUBSTRING(
+                                tt_matches.NBSM      = tt_matches.NBSM + 1
+                                tt_submatches.NUM    = tt_matches.NUM
+                                tt_submatches.SNUM   = in_cpt - 1
+                                tt_submatches.OSTART = in_vector[ in_cpt * 2 - 1 ] + 1
+                                tt_submatches.OEND   = in_vector[ in_cpt * 2     ] + 1
+                                tt_submatches.LEN    = tt_submatches.OEND - tt_submatches.OSTART
+                                tt_submatches.VAL    = SUBSTRING(
                                     pr_ch_str,            /* source string      */
                                     tt_submatches.OSTART, /* offset start match */
                                     tt_submatches.LEN     /* length of match    */
@@ -1043,7 +1163,15 @@ PROCEDURE get_matches :
 
         END. /* IF pr_in_ret >= 0 */
 
-/*        RUN pcre_free( pt_pcre ).*/
+        IF GET-POINTER-VALUE( pt_pcre_extra) > 0 THEN DO :
+            RUN pcre_free_study( pt_pcre_extra ).
+            IF GET-POINTER-VALUE( pt_pcre_extra) > 0 THEN SET-SIZE(pt_pcre_extra) = 0.
+        END.
+
+        IF GET-POINTER-VALUE( pt_pcre) > 0 THEN DO :
+            //RUN pcre_free( pt_pcre ).
+            IF GET-POINTER-VALUE( pt_pcre) > 0 THEN SET-SIZE(pt_pcre) = 0.
+        END.
 
     END. /* IF pt_pcre <> ? AND in_errcode = 0 */
 

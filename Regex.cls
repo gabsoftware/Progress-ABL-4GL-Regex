@@ -125,7 +125,11 @@ CLASS Regex:
         in_options = THIS-OBJECT:mOptions( pr_ch_options ).
 
         DEFINE VARIABLE in_ret AS INTEGER NO-UNDO.
-        RUN match IN hd_regex( INPUT pr_ch_str, INPUT pr_ch_regex, INPUT in_options, OUTPUT in_ret ).
+        RUN match IN hd_regex( INPUT pr_ch_str, INPUT pr_ch_regex, INPUT in_options, OUTPUT in_ret ) NO-ERROR.
+        
+        IF ERROR-STATUS:ERROR THEN DO :
+            MESSAGE "Error !" VIEW-AS ALERT-BOX.
+        END.
 
         RETURN in_ret > -1.
 
@@ -280,6 +284,10 @@ CLASS Regex:
         in_options = THIS-OBJECT:mOptions( pr_ch_options ).
 
         RUN match IN hd_regex( INPUT pr_ch_str, INPUT pr_ch_regex, INPUT in_options, OUTPUT in_ret ).
+        
+        IF ERROR-STATUS:ERROR THEN DO :
+            MESSAGE "Error !" VIEW-AS ALERT-BOX.
+        END.
 
         RETURN in_ret.
 
@@ -435,6 +443,10 @@ CLASS Regex:
 
         /* get the matches */
         RUN get_matches IN hd_regex( INPUT pr_ch_str, INPUT pr_ch_regex, INPUT in_options, OUTPUT in_ret, OUTPUT DATASET ds_regex ).
+        
+        IF ERROR-STATUS:ERROR THEN DO :
+            MESSAGE "Error !" VIEW-AS ALERT-BOX.
+        END.
 
         RETURN in_ret.
 
@@ -516,6 +528,11 @@ CLASS Regex:
 
         /* get the matches */
         RUN get_matches IN hd_regex( INPUT pr_ch_str, INPUT pr_ch_regex, INPUT in_options, OUTPUT in_ret, OUTPUT DATASET ds_regex ).
+        
+        IF ERROR-STATUS:ERROR THEN DO :
+            MESSAGE "Error !" VIEW-AS ALERT-BOX.
+            LEAVE.
+        END.
 
 
         /* for each matches */
